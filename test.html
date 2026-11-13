@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一刻千年 用户测试</title>
+<style>
+/* 用户测试（方案 §6.2 F7）：马达拿给同学做，一人约 10 分钟。认人连线、A/B 偏好、上手任务（观察员掐表）、打分。
+   结果交给服务（code/server.py 的 /api/usertest，追加到 data/usertest/results.jsonl）；没有服务（网上的静态网站）时给一段结果码复制给马达，也能下载 JSON。
+   上手任务：舞台嵌在本页里，受试者点“开始”再动手；刻名、拖到 1907、揭拓片由舞台报给本页自动停表，影子那条自己点“做到了”；三分钟没做出来自动算放弃。 */
+:root { --stage:#12100D; --wall:#1C1915; --line:#3A332A; --sand:#C8B48F; --fire:#E8A65A; --paper:#F3EEE4; --ink:#A39784;
+  --font:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong",serif; }
+* { box-sizing:border-box; }
+html, body { margin:0; background:var(--stage); color:var(--paper); font:18px/1.6 var(--font); }
+main { max-width:1180px; margin:0 auto; padding:32px 24px 64px; }
+h1 { margin:0 0 6px; font-size:34px; letter-spacing:0.2em; color:var(--sand); font-weight:600; }
+h2 { margin:0 0 18px; font-size:26px; color:var(--sand); font-weight:600; }
+p.q { margin:0 0 18px; font-size:20px; }
+.step[hidden] { display:none; }
+button { font:inherit; color:var(--paper); background:var(--wall); border:1px solid var(--line); border-radius:22px; padding:8px 22px; cursor:pointer; }
+button.on { border-color:var(--fire); color:var(--fire); }
+button.go { border-color:var(--sand); color:var(--sand); }
+button:disabled { opacity:0.4; cursor:default; }
+.row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
+.photos, .reliefs { display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; }
+figure { margin:0; }
+figure img { width:100%; aspect-ratio:460/540; object-fit:cover; border-radius:6px; display:block; }
+figcaption { text-align:center; color:var(--sand); font-size:20px; margin-top:4px; }
+.pick { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; margin-top:6px; }
+.pick button { padding:4px 0; border-radius:8px; }
+.ab { display:grid; grid-template-columns:1fr 1fr; gap:24px; max-width:820px; }
+.ab figure img { border-radius:8px; }
+.qa { margin:18px 0; }
+.qa .row button { min-width:120px; }
+.task { display:grid; grid-template-columns:1fr auto auto auto auto; gap:12px; align-items:center; padding:10px 0; border-bottom:1px solid var(--line); }
+.task.cur .t { color:var(--fire); }
+/* 第三步：左边一列任务，右边是嵌进来的舞台，尽量占满一屏 */
+body.s3 main { max-width:none; padding:16px 20px 20px; }
+body.s3 main > h1, body.s3 #sidLine { display:none; }
+.s3grid { display:grid; grid-template-columns:300px 1fr; gap:20px; align-items:start; margin-top:10px; }
+.s3grid .task { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 0; }
+.s3grid .task .t { flex-basis:100%; font-size:18px; }
+.s3grid .task .clock { min-width:0; text-align:left; margin-right:auto; }
+.s3grid .task button { padding:5px 14px; }
+.stagebox { height:max(540px, calc(100vh - 170px)); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.stagebox iframe { width:100%; height:100%; border:0; display:block; }
+.code { width:100%; min-height:120px; font:14px/1.5 ui-monospace, Menlo, Consolas, monospace; word-break:break-all; }
+.task .t { font-size:20px; }
+.task .clock { min-width:80px; text-align:right; color:var(--fire); font-variant-numeric:tabular-nums; }
+.scale { display:flex; gap:8px; }
+.scale button { width:48px; padding:6px 0; border-radius:10px; }
+textarea { width:100%; min-height:80px; font:inherit; color:var(--paper); background:var(--wall); border:1px solid var(--line); border-radius:8px; padding:10px; }
+.nav { margin-top:28px; display:flex; justify-content:space-between; align-items:center; color:var(--ink); }
+.note { color:var(--ink); font-size:16px; }
+label { cursor:pointer; }
+</style>
+</head>
+<body>
+<main>
+  <h1>一刻千年</h1>
+  <p class="note" id="sidLine"></p>
+
+  <section class="step" data-step="0">
+    <h2>开始之前</h2>
+    <p class="q">这次测试大约十分钟，分四部分：认人、二选一、上手试一试、打分。</p>
+    <p class="q">只记录你的选择、用时和打分，不拍照，不记名字（第三部分写在石碑上的名字也不记）。</p>
+    <p class="q" id="pcOnly" hidden>请用电脑（Chrome 或 Edge）做，手机屏幕太小。</p>
+    <p class="q"><label><input type="checkbox" id="agree"> 我同意参加</label></p>
+  </section>
+
+  <section class="step" data-step="1" hidden>
+    <h2>一　认人</h2>
+    <p class="q">上面是六张照片，下面是把它们刻成的浮雕（顺序打乱了）。给每块浮雕选一张照片。</p>
+    <div class="photos" id="mPhotos"></div>
+    <div style="height:24px"></div>
+    <div class="reliefs" id="mReliefs"></div>
+  </section>
+
+  <section class="step" data-step="2" hidden>
+    <h2>二　二选一 <span class="note" id="abN"></span></h2>
+    <div class="ab" id="abPair"></div>
+    <div class="qa"><p class="q">哪一块更像刻在石头上的？</p><div class="row" data-q="stone"><button data-v="L">左</button><button data-v="R">右</button></div></div>
+    <div class="qa"><p class="q">哪一块更像云冈石窟里的造像？</p><div class="row" data-q="yungang"><button data-v="L">左</button><button data-v="R">右</button></div></div>
+  </section>
+
+  <section class="step" data-step="3" hidden>
+    <h2>三　上手试一试</h2>
+    <p class="note">右边是作品本身。四件事一件一件来：先点这件事的“开始”，再在右边的画面里自己想办法做到。做到了页面会自己记下，影子那件做到了自己点“做到了”；三分钟没做出来就算了，也可以点“放弃”。</p>
+    <div class="s3grid">
+      <div id="tasks"></div>
+      <div class="stagebox"><iframe id="stageFrame" title="一刻千年"></iframe></div>
+    </div>
+  </section>
+
+  <section class="step" data-step="4" hidden>
+    <h2>四　打分</h2>
+    <div id="ratings"></div>
+    <p class="q" style="margin-top:20px">一句话感受（可以不写）</p>
+    <textarea id="comment" maxlength="300"></textarea>
+  </section>
+
+  <section class="step" data-step="5" hidden>
+    <h2>谢谢</h2>
+    <p class="q" id="doneMsg">正在提交…</p>
+    <div id="codeBox" hidden>
+      <textarea class="code" id="code" readonly></textarea>
+      <div class="row" style="margin-top:12px"><button class="go" id="copy">复制</button><button id="dl">下载成文件</button><span class="note" id="copied"></span></div>
+    </div>
+  </section>
+
+  <div class="nav"><span id="hint"></span><button class="go" id="next">下一步</button></div>
+</main>
+<script>
+const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)];
+const NUM = ["1", "2", "3", "4", "5", "6"], GAN = ["甲", "乙", "丙", "丁", "戊", "己"];
+const shuffle = (a) => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const sid = new Date().toISOString().slice(5, 16).replace(/[-T:]/g, "") + "-" + Math.random().toString(36).slice(2, 6);
+$("#sidLine").textContent = `编号 ${sid}`;
+const R = { sid, started: new Date().toISOString(), ua: navigator.userAgent.slice(0, 120), match: {}, ab: [], tasks: {}, ratings: {}, comment: "", t: {} };
+let step = 0, items = null, stepT0 = performance.now();
+const LIMIT = 180, running = {};   // 正在计时的任务 → 它的 stop
+let lastLight = null, yearHold = 0;
+// 舞台（同源 iframe）报来的事：做到了就自动停表
+window.addEventListener("message", (e) => {
+  if (e.origin !== location.origin || !e.data || e.data.ykqn !== 1) return;
+  const d = e.data;
+  if (d.type === "light") lastLight = { mode: d.mode, dir: d.dir, xy: d.xy, z: d.z };
+  else if (d.type === "name") running.name?.(true, "auto");
+  else if (d.type === "peel") running.rub?.(true, "auto");
+  else if (d.type === "year") {   // 停在 1907 前后两年里半秒以上才算（拖过去路过不算）
+    clearTimeout(yearHold);
+    if (Math.abs(d.y - 1907) <= 2) yearHold = setTimeout(() => running.y1907?.(true, "auto"), 600);
+  }
+});
+
+async function init() {
+  items = await (await fetch("assets/usertest/items.json")).json();
+  // 认人：照片编号、浮雕天干都打乱
+  const photos = shuffle(items.match), reliefs = shuffle(items.match);
+  R.matchOrder = { photos, reliefs };
+  $("#mPhotos").innerHTML = photos.map((w, i) => `<figure><img src="assets/usertest/m_${w}_photo.jpg" alt=""><figcaption>${NUM[i]}</figcaption></figure>`).join("");
+  $("#mReliefs").innerHTML = reliefs.map((w, i) => `<figure data-w="${w}"><img src="assets/usertest/m_${w}_relief.jpg" alt=""><figcaption>${GAN[i]}</figcaption>
+    <div class="pick">${NUM.map((n, k) => `<button data-p="${photos[k]}">${n}</button>`).join("")}</div></figure>`).join("");
+  $$("#mReliefs figure").forEach((f) => f.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+    f.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); R.match[f.dataset.w] = b.dataset.p; update();
+  })));
+  // 二选一：顺序打乱，每组左右随机
+  R.abOrder = shuffle(items.ab).map((w) => { const o = items.other[w]; return { w, other: o, left: Math.random() < 0.5 ? o : "E" }; });   // 完整 E 对 A 或 G
+  // 任务
+  const TASKS = [["name", "写下你的名字，刻到石碑上"], ["shadow", "让鼻子的影子落到脸颊上"], ["y1907", "把时间拖到 1907 年"], ["rub", "拓一张拓片，揭下来"]];
+  $("#tasks").innerHTML = TASKS.map(([k, t]) => `<div class="task" data-k="${k}"><span class="t">${t}</span><span class="clock">0.0 秒</span>
+    <button data-a="start">开始</button><button data-a="done" disabled>做到了</button><button data-a="give" disabled>放弃</button></div>`).join("");
+  $$(".task").forEach((row) => {
+    const k = row.dataset.k, clock = row.querySelector(".clock"); let t0 = 0, timer = 0;
+    const [bS, bD, bG] = row.querySelectorAll("button");
+    const stop = (ok, how) => {
+      if (running[k] !== stop) return;
+      delete running[k]; clearInterval(timer); row.classList.remove("cur");
+      const s = Math.min(LIMIT, (performance.now() - t0) / 1000);
+      R.tasks[k] = { sec: +s.toFixed(1), ok, how };   // how：auto 舞台报的 / self 自己点的 / give 放弃 / limit 到三分钟
+      if (k === "shadow") R.tasks[k].light = lastLight;   // 自己点的：留下当时光的位置，事后能核
+      clock.textContent = `${s.toFixed(1)} 秒${ok ? "" : how === "limit" ? "（三分钟到了）" : "（放弃）"}`; bD.disabled = bG.disabled = true; update();
+    };
+    bS.addEventListener("click", () => {
+      t0 = performance.now(); bS.disabled = true; bD.disabled = bG.disabled = false; row.classList.add("cur"); running[k] = stop;
+      timer = setInterval(() => { const s = (performance.now() - t0) / 1000; clock.textContent = `${s.toFixed(1)} 秒`; if (s >= LIMIT) stop(false, "limit"); }, 100);
+      $("#stageFrame").focus();
+    });
+    bD.addEventListener("click", () => stop(true, "self")); bG.addEventListener("click", () => stop(false, "give"));
+  });
+  // 打分
+  const RT = [["fun", "有不有趣"], ["beauty", "好不好看"], ["keep", "想不想带走一张拓片或观照记录"]];
+  $("#ratings").innerHTML = RT.map(([k, t]) => `<div class="qa"><p class="q">${t}（1 一点也不，5 非常）</p><div class="scale" data-k="${k}">${[1, 2, 3, 4, 5].map((v) => `<button data-v="${v}">${v}</button>`).join("")}</div></div>`).join("");
+  $$(".scale").forEach((sc) => sc.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { sc.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); R.ratings[sc.dataset.k] = +b.dataset.v; update(); })));
+  $("#agree").addEventListener("change", update);
+  update();
+}
+
+let abI = 0, abCur = {};
+function showAB() {
+  const it = R.abOrder[abI], l = it.left, r = l === "E" ? it.other : "E";
+  $("#abN").textContent = `${abI + 1} / ${R.abOrder.length}`;
+  $("#abPair").innerHTML = [l, r].map((v) => `<figure><img src="assets/usertest/ab_${it.w}_${v}.jpg" alt=""></figure>`).join("");
+  abCur = { w: it.w, other: it.other, left: l, t0: performance.now() };
+  $$(".qa .row[data-q] button").forEach((b) => b.classList.remove("on"));
+}
+$$(".qa .row[data-q]").forEach((row) => row.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => {
+  row.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); abCur[row.dataset.q] = b.dataset.v; update();
+})));
+
+function ready() {
+  if (step === 0) return $("#agree").checked;
+  if (step === 1) return Object.keys(R.match).length === 6;
+  if (step === 2) return abCur.stone && abCur.yungang;
+  if (step === 3) return Object.keys(R.tasks).length === 4 && !Object.keys(running).length;
+  if (step === 4) return Object.keys(R.ratings).length === 3;
+  return false;
+}
+function update() { $("#next").disabled = !ready(); $("#hint").textContent = step === 1 ? `已选 ${Object.keys(R.match).length} / 6` : ""; }
+
+$("#next").addEventListener("click", async () => {
+  if (!ready()) return;
+  if (step === 2) {   // 一组记一条：选的是 E（完整）还是对照（A 深度直出 / G 灰度当高度）
+    const pick = (v) => (v === "L" ? abCur.left : abCur.left === "E" ? abCur.other : "E");
+    R.ab.push({ w: abCur.w, other: abCur.other, left: abCur.left, stone: pick(abCur.stone), yungang: pick(abCur.yungang), sec: +((performance.now() - abCur.t0) / 1000).toFixed(1) });
+    if (++abI < R.abOrder.length) { showAB(); update(); return; }
+  }
+  R.t[`step${step}`] = +((performance.now() - stepT0) / 1000).toFixed(1); stepT0 = performance.now();
+  step++;
+  $$(".step").forEach((s) => (s.hidden = +s.dataset.step !== step));
+  document.body.classList.toggle("s3", step === 3);
+  if (step === 2) { abI = 0; showAB(); }
+  if (step === 3 && !$("#stageFrame").src) $("#stageFrame").src = "./?work=t01&mute=1";   // 一律用 t01（公有领域，正脸）
+  if (step === 4) $("#stageFrame").src = "about:blank";   // 做完了就把舞台关掉，省显卡
+  if (step === 5) { $("#next").hidden = true; await submit(); }
+  update(); window.scrollTo(0, 0);
+});
+
+// 结果码：YKQN1z + base64url(deflate-raw(JSON))；浏览器没有 CompressionStream 时 YKQN1j + base64url(JSON)。
+// 组长那边用 code/tools/eval/usertest_report.py 读（马达把收到的码贴进 data/usertest/ 下任意 .txt）
+const b64url = (u8) => { let b = ""; for (let i = 0; i < u8.length; i += 0x8000) b += String.fromCharCode(...u8.subarray(i, i + 0x8000)); return btoa(b).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""); };
+async function packCode(obj) {
+  const raw = new TextEncoder().encode(JSON.stringify(obj));
+  if (window.CompressionStream) {
+    try { return "YKQN1z" + b64url(new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer())); } catch (e) { /* 退回不压缩 */ }
+  }
+  return "YKQN1j" + b64url(raw);
+}
+async function submit() {
+  R.comment = $("#comment").value.trim(); R.finished = new Date().toISOString(); R.v = 2;
+  try {
+    const r = await fetch("api/usertest", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...R, mode: "server" }) });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json(); $("#doneMsg").textContent = `已经记下了（这是第 ${j.count} 份）。`;
+  } catch (e) {   // 没有服务（网上）：给一段结果码，复制给马达
+    R.mode = "online";
+    const code = await packCode(R);
+    $("#code").value = code; $("#codeBox").hidden = false;
+    $("#doneMsg").textContent = "最后一步：点“复制”，把这段结果码用微信发给马达。里面只有你的选择、用时和打分。";
+    $("#copy").onclick = async () => {
+      try { await navigator.clipboard.writeText(code); } catch (err) { $("#code").select(); document.execCommand("copy"); }
+      $("#copied").textContent = "已复制";
+    };
+    $("#dl").onclick = () => {
+      const a = document.createElement("a"); a.download = `一刻千年_用户测试_${sid}.json`;
+      a.href = URL.createObjectURL(new Blob([JSON.stringify(R, null, 1)], { type: "application/json" })); a.click();
+    };
+  }
+}
+if (window.matchMedia("(max-width: 900px)").matches) $("#pcOnly").hidden = false;
+init();
+</script>
+</body>
+</html>

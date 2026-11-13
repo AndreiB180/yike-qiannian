@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>传拓</title>
+<style>
+/* 平板拓包页（F4）：大屏上进入“拓”以后，这里是同一张蒙在石头上的湿纸；用手指或笔拍墨，每一下同步到大屏 */
+:root { --stage:#12100D; --line:#3A332A; --sand:#C8B48F; --fire:#E8A65A; --font:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong",serif; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; overflow:hidden; background:var(--stage); font-family:var(--font); -webkit-user-select:none; user-select:none; touch-action:none; }
+#paper { position:fixed; left:50%; top:46%; transform:translate(-50%, -50%); box-shadow:0 8px 30px rgba(0,0,0,0.6); touch-action:none; }
+.bar { position:fixed; left:50%; bottom:3vh; transform:translateX(-50%); display:flex; gap:2.4vw; }
+.bar button { min-width:min(18vw, 110px); height:min(11vw, 64px); padding:0 3vw; border-radius:999px; border:1px solid var(--line); background:rgba(28,25,21,0.92);
+  color:var(--sand); font:min(5.4vw, 30px) var(--font); }
+.bar button.on { border-color:var(--sand); }
+.bar button.go { border-color:var(--fire); color:var(--fire); }
+.wait { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; color:var(--sand); font-size:6vh; letter-spacing:0.6em; }
+.wait[hidden] { display:none; }
+</style>
+</head>
+<body>
+<canvas id="paper"></canvas>
+<div class="wait" id="wait">待纸</div>
+<div class="bar">
+  <button data-ink="乌金" class="on">乌金</button>
+  <button data-ink="蝉翼">蝉翼</button>
+  <button id="peel" class="go">揭</button>
+</div>
+<script type="module">
+// 大屏交来的是纸面接触图（哪里纸贴着石头高处）；这里用同一个种子生成同一张宣纸，拍同样的墨出来和大屏一模一样。
+// 每一下：本地马上上墨；攒 80 毫秒一批交给服务，大屏轮询取走
+import { fromContactBytes, dab, paint } from "./rubbing.js";
+const cv = document.getElementById("paper"), g = cv.getContext("2d");
+let T = null, img = null, ver = -1, style = "乌金", R = 0, queue = [], peeled = false, ptr = null, last = null;
+function fitCanvas() {
+  if (!T) return;
+  const s = Math.min(innerWidth * 0.96 / T.w, innerHeight * 0.8 / T.h);
+  cv.style.width = `${T.w * s}px`; cv.style.height = `${T.h * s}px`;
+}
+function repaint(win) { paint(T, img.data, style, win, false, true); if (win) g.putImageData(img, 0, 0, win[0], win[1], win[2], win[3]); else g.putImageData(img, 0, 0); }
+async function load() {
+  try {
+    const j = await (await fetch("api/rubsrc", { cache: "no-store" })).json();
+    if (j.version !== ver && j.w > 0) {
+      const bytes = new Uint8Array(await (await fetch("api/rubsrc.bin", { cache: "no-store" })).arrayBuffer());
+      T = fromContactBytes(bytes, j.w, j.h); ver = j.version; R = 0.03 * Math.max(j.w, j.h); peeled = false; queue = [];
+      cv.width = j.w; cv.height = j.h; img = g.createImageData(j.w, j.h); repaint(null); fitCanvas();
+      document.getElementById("wait").hidden = true;
+    }
+  } catch (e) { /* 服务没开 */ }
+  setTimeout(load, 1000);
+}
+async function flush() {
+  if (queue.length && T) {
+    const dabs = queue; queue = [];
+    try { await fetch("api/rub", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: ver, dabs }) }); } catch (e) { /* 断了就算了 */ }
+  }
+  setTimeout(flush, 80);
+}
+function send(cmd) { fetch("api/rub", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: ver, dabs: queue.splice(0), cmd }) }).catch(() => {}); }
+const uv = (e) => { const b = cv.getBoundingClientRect(); return [(e.clientX - b.left) / b.width, (e.clientY - b.top) / b.height]; };
+const amt = (e) => 0.16 + 0.24 * (e.pointerType === "pen" && e.pressure > 0 ? e.pressure : 0.55);   // 手指没有笔压，按中等力度；一下只上一层
+function hit(u, v, a) {
+  if (!T || peeled) return;
+  const q = [+u.toFixed(4), +v.toFixed(4), +a.toFixed(3)];
+  const win = dab(T, q[0] * T.w, q[1] * T.h, R, q[2]); if (win) repaint(win);
+  queue.push(q);
+}
+cv.addEventListener("pointerdown", (e) => { try { cv.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件 */ } ptr = e.pointerId; const p = uv(e); last = p; hit(p[0], p[1], amt(e)); });
+cv.addEventListener("pointermove", (e) => {
+  if (ptr !== e.pointerId || !T) return;
+  const p = uv(e); if (Math.hypot((p[0] - last[0]) * T.w, (p[1] - last[1]) * T.h) > 0.5 * R) { last = p; hit(p[0], p[1], amt(e) * 0.8); }
+});
+for (const ev of ["pointerup", "pointercancel"]) cv.addEventListener(ev, () => { ptr = null; });
+document.querySelectorAll("[data-ink]").forEach((b) => b.addEventListener("click", () => {
+  style = b.dataset.ink; document.querySelectorAll("[data-ink]").forEach((x) => x.classList.toggle("on", x === b)); if (T) repaint(null); send(style);
+}));
+document.getElementById("peel").addEventListener("click", () => { if (!T || peeled) return; peeled = true; send("揭"); });
+addEventListener("resize", fitCanvas);
+load(); flush();
+</script>
+</body>
+</html>

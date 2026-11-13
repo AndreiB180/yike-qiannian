@@ -1,0 +1,149 @@
+/* 夜访石窟：方案 v2 §5 的色板。亮场（投影对比度低时用）：舞台提到深灰褐，面板跟着提，石面由渲染侧提曝光 */
+:root {
+  --stage: #12100D;
+  --wall: #1C1915;
+  --wall-a: rgba(28, 25, 21, 0.86);
+  --line: #3A332A;
+  --sand: #C8B48F;
+  --fire: #E8A65A;
+  --paper: #F3EEE4;
+  --ink: #A39784;
+  --font: "Noto Serif SC", "Source Han Serif SC", "Songti SC", "STSong", serif;
+}
+body[data-theme="light"] {
+  --stage: #4A4237;
+  --wall: #5A5145;
+  --wall-a: rgba(90, 81, 69, 0.9);
+  --line: #8A7D69;
+  --ink: #E2D8C6;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: var(--stage); color: var(--paper); font-family: var(--font); }
+#stage { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }   /* 刻字时的石粉 */
+
+.title { position: fixed; left: 44px; top: 30px; pointer-events: none; }
+.title h1 { margin: 0; font-size: 38px; font-weight: 600; letter-spacing: 0.32em; color: var(--sand); }
+
+.lights { position: fixed; left: 44px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 18px; }
+.lights button {
+  width: 62px; height: 62px; border-radius: 50%; border: 1px solid var(--line); background: var(--wall-a);
+  color: var(--ink); font: 24px var(--font); cursor: pointer; transition: color .2s, border-color .2s;
+}
+.lights button:hover { color: var(--paper); }
+.lights button.on { color: var(--fire); border-color: var(--fire); }
+
+/* 面板：像展柜旁的标签栏，不是设置卡片：没有底框，左边一道细线 */
+.panel { position: fixed; right: 36px; top: 50%; transform: translateY(-50%); width: 212px; padding: 4px 0 4px 20px; border-left: 1px solid var(--line); }
+.panel section { margin-bottom: 18px; }
+.panel section:last-child { margin-bottom: 0; }
+.panel h2 { margin: 0 0 9px; font-size: 13px; font-weight: 400; letter-spacing: 0.4em; color: var(--ink); }
+.row, .works { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  min-width: 36px; height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: var(--wall-a);
+  color: var(--paper); font: 14px var(--font); cursor: pointer;
+}
+.chip:hover { border-color: var(--ink); }
+.chip.on { border-color: var(--sand); color: var(--sand); }
+.swatch { width: 40px; height: 40px; border-radius: 6px; border: 2px solid var(--line); background: var(--c); cursor: pointer; }
+.swatch.on { border-color: var(--sand); }
+.works .thumb { width: 44px; height: 44px; padding: 0; border-radius: 6px; border: 2px solid transparent; background: var(--wall) center / cover no-repeat; cursor: pointer; }
+.works .thumb.on { border-color: var(--sand); }
+.works + .new { margin-top: 10px; }
+input[type="range"] { width: 100%; accent-color: var(--sand); }
+
+/* 时间轴：年份大字 + 两字事件名；轨道上只有关键年份的刻度；2026 以后的一段跟着“治水 / 不治”变色 */
+.time { position: fixed; bottom: 22px; left: 50%; width: 640px; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 22px; user-select: none; -webkit-user-select: none; }
+.readout { display: flex; align-items: baseline; gap: 10px; min-width: 128px; }
+.readout .year { font-size: 30px; font-weight: 600; color: var(--sand); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+.readout .event { font-size: 15px; letter-spacing: 0.3em; color: var(--fire); min-width: 3em; }
+.track { position: relative; height: 44px; cursor: pointer; touch-action: none; }
+.track .rail, .track .fill { position: absolute; left: 0; top: 14px; height: 2px; border-radius: 1px; }
+.track .rail { right: 0; background: var(--line); }
+.track .fill { width: 0; background: var(--sand); }
+.track .fill.bad { background: linear-gradient(90deg, var(--sand) 0, var(--sand) var(--cut), #B23A2B var(--cut)); }
+.track .fill.good { background: linear-gradient(90deg, var(--sand) 0, var(--sand) var(--cut), #6F9A86 var(--cut)); }
+.ticks span { position: absolute; top: 9px; width: 1px; height: 12px; background: var(--line); }
+.ticks span.past { background: var(--sand); }
+.ticks label { position: absolute; top: 25px; transform: translateX(-50%); font-size: 11px; color: var(--ink); white-space: nowrap; pointer-events: none; }
+.knob { position: absolute; top: 6px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; border: 1px solid var(--fire); background: var(--stage); box-shadow: 0 0 10px rgba(232, 166, 90, 0.35); }
+.fork { display: flex; flex-direction: column; gap: 6px; }
+.fork .chip { height: 26px; font-size: 13px; padding: 0 10px; opacity: 0.55; transition: opacity .2s; }
+.fork.live .chip { opacity: 1; }
+
+/* 1907：旁边浮出一张沙畹当年在云冈拍的照片（公有领域），像夹在展柜里的老相片 */
+.relic { position: fixed; margin: 0; padding: 8px 8px 6px; background: #E9E1D0; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.55); opacity: 0; transform: rotate(-1.2deg); transition: opacity .35s; pointer-events: none; }
+.relic[hidden] { display: none; }
+.relic img { display: block; width: 100%; filter: sepia(0.35) contrast(1.05); }
+.relic figcaption { margin-top: 5px; font-size: 11px; letter-spacing: 0.2em; color: #5D4C3E; text-align: right; }
+
+/* 录视频的干净画面：只留浮雕（clean=2 再留时间轴、1907 的老照片） */
+body[data-clean] .title, body[data-clean] .lights, body[data-clean] .panel { display: none; }
+body[data-clean="1"] .time, body[data-clean="1"] .relic { display: none; }
+
+.cam { position: fixed; inset: 0; background: rgba(18, 16, 13, 0.94); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
+.cam[hidden], .busy[hidden], .fps[hidden] { display: none; }
+.cam video { max-width: 72vw; max-height: 70vh; border: 1px solid var(--line); border-radius: 6px; transform: scaleX(-1); }
+.cam .row { align-items: center; gap: 18px; }
+.shutter { width: 72px; height: 72px; border-radius: 50%; border: 1px solid var(--fire); background: transparent; color: var(--fire); font: 24px var(--font); cursor: pointer; }
+.busy { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(18, 16, 13, 0.55); pointer-events: none; }
+.busy span { font-size: 22px; letter-spacing: 0.6em; color: var(--sand); animation: breathe 1.6s ease-in-out infinite; }
+@keyframes breathe { 50% { opacity: 0.35; } }
+.fps { position: fixed; right: 12px; bottom: 8px; font-size: 11px; color: var(--ink); }
+
+/* 窄屏：标题左上，光源钮右上一排，面板收成底部一条横向可滑的栏 */
+@media (max-width: 760px) {
+  .title { left: 16px; top: 16px; }
+  .title h1 { font-size: 22px; letter-spacing: 0.24em; }
+  .lights { left: auto; right: 16px; top: 10px; transform: none; flex-direction: row; gap: 10px; }
+  .lights button { width: 42px; height: 42px; font-size: 18px; }
+  .panel {
+    left: 0; right: 0; top: auto; bottom: 0; transform: none; width: auto; padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-left: 0; border-top: 1px solid var(--line); background: var(--wall-a);
+    display: flex; gap: 18px; overflow-x: auto; align-items: flex-start;
+  }
+  .panel section { margin: 0; flex: none; }
+  .panel h2 { font-size: 11px; margin-bottom: 6px; }
+  .works { flex-wrap: nowrap; }
+  .works .thumb { width: 38px; height: 38px; }
+  .works + .new { margin-top: 6px; }
+  .panel input[type="range"] { width: 120px; }
+  .panel .tail { flex-direction: column; align-self: center; }
+  .time { gap: 12px; }
+  .readout { min-width: 0; flex-direction: column; gap: 0; }
+  .readout .year { font-size: 22px; }
+  .readout .event { font-size: 12px; }
+  .ticks label { font-size: 10px; }
+}
+
+/* 拓（F4）：湿纸蒙在浮雕上，点按拍墨；揭下来的拓片放在中间，像拓本册页 */
+#rub { position: fixed; touch-action: none; cursor: crosshair; }
+#rub[hidden], .rubbar[hidden], .sheet[hidden], #rubSave[hidden], #rubPeel[hidden] { display: none; }
+.rubbar { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 3; }
+body[data-rub] .time, body[data-rub] .relic { display: none; }
+.sheet { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(18, 16, 13, 0.9); pointer-events: none; }
+.sheet canvas { max-width: 78vw; max-height: 80vh; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6); transform: rotate(-0.6deg); }
+body[data-clean] .rubbar { display: none; }   /* 录视频：拓的工具条也藏起来 */
+/* 在算（拓、导出、记录、换作品）：光标转圈，按下的按钮压暗一点 */
+body.busy, body.busy * { cursor: progress !important; }
+.busy:not(body) { opacity: 0.6; }
+/* 执灯：角上一个小预览，看得到摄像头认到的灯头 */
+#lampPrev { position: fixed; left: 28px; bottom: 112px; width: 160px; height: 120px; border-radius: 8px; border: 1px solid var(--line); z-index: 6; }
+#lampPrev[hidden] { display: none; }
+#kefa { flex-wrap: wrap; gap: 6px; }
+#kefa .chip { padding-left: 8px; padding-right: 8px; letter-spacing: 0; white-space: nowrap; }
+
+/* 题名板（网上没有平板时）：write.html 嵌在中间一层 */
+.namepad { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; background: rgba(18, 16, 13, 0.94); }
+.namepad[hidden] { display: none; }
+.namepad iframe { width: min(94vw, 640px); height: min(90vh, 920px); border: 0; border-radius: 8px; background: var(--stage); }
+.namepad #namePadClose { position: absolute; top: 24px; right: 28px; }
+body.static .panel .new { display: none; }   /* 静态网站没有后端建浮雕：拍 / 传藏起来 */
+
+/* 窗口矮（小笔记本、嵌在用户测试页里）：面板缩一点，作品一行四个；还放不下就让面板自己滚，底下的按钮不会被切掉 */
+.panel { max-height: calc(100vh - 24px); overflow-y: auto; scrollbar-width: thin; }
+@media (max-height: 820px) and (min-width: 761px) {
+  .panel section { margin-bottom: 12px; }
+  .works { gap: 6px; }
+  .works .thumb { width: 38px; height: 38px; }
+}

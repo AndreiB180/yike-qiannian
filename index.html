@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>一刻千年</title>
+<link rel="stylesheet" href="stage.css">
+</head>
+<body data-theme="dark">
+<canvas id="stage"></canvas>
+<canvas id="fx"></canvas>
+<canvas id="rub" hidden></canvas>
+<video id="lampVideo" playsinline muted hidden></video>
+<canvas id="lampPrev" width="160" height="120" hidden></canvas>
+
+<header class="title" id="title">
+  <h1>一刻千年</h1>
+</header>
+
+<nav class="lights" id="lights" aria-label="光源">
+  <button data-light="sun" title="日">日</button>
+  <button data-light="torch" title="火">火</button>
+  <button data-light="lamp" title="灯">灯</button>
+</nav>
+
+<aside class="panel" id="panel">
+  <section>
+    <h2>作品</h2>
+    <div class="works" id="works"></div>
+    <div class="row new">
+      <button class="chip" id="shoot">拍</button>
+      <button class="chip" id="upload">传</button>
+      <input type="file" id="file" accept="image/*" hidden>
+    </div>
+  </section>
+  <section>
+    <h2>石材</h2>
+    <div class="row">
+      <button class="swatch" data-stone="云冈砂岩" style="--c:#B9A47F" title="云冈砂岩"></button>
+      <button class="swatch" data-stone="汉白玉" style="--c:#E6E2DA" title="汉白玉"></button>
+    </div>
+  </section>
+  <section>
+    <h2>刻法</h2>
+    <div class="row" id="kefa">
+      <button class="chip on" data-kefa="剔地起突">剔地起突</button>
+      <button class="chip" data-kefa="压地隐起">压地隐起</button>
+      <button class="chip" data-kefa="减地平钑">减地平钑</button>
+    </div>
+  </section>
+  <section>
+    <h2>浮雕高度</h2>
+    <input type="range" id="scale" min="0.3" max="2" step="0.01" value="1" aria-label="浮雕高度">
+  </section>
+  <section class="row tail">
+    <button class="chip" id="themeBtn">亮场</button>
+    <button class="chip" id="savePng">存图</button>
+    <button class="chip" id="nameBtn">题名</button>
+    <button class="chip" id="rubBtn">拓</button>
+    <button class="chip" id="stlBtn">模型</button>
+    <button class="chip" id="recBtn">记录</button>
+    <button class="chip" id="lampBtn">执灯</button>
+  </section>
+</aside>
+
+<figure class="relic" id="relic" hidden>
+  <img id="relicImg" alt="">
+  <figcaption id="relicCap"></figcaption>
+</figure>
+
+<div class="time" id="time">
+  <div class="readout"><span class="year" id="year">483</span><span class="event" id="event">开凿</span></div>
+  <div class="track" id="track" aria-label="年代">
+    <div class="rail"></div>
+    <div class="fill" id="fill"></div>
+    <div class="ticks" id="ticks"></div>
+    <div class="knob" id="knob"></div>
+  </div>
+  <div class="fork" id="fork">
+    <button class="chip on" data-env="0">治水</button>
+    <button class="chip" data-env="1">不治</button>
+  </div>
+</div>
+
+<div class="rubbar" id="rubBar" hidden>
+  <button class="chip on" data-ink="乌金">乌金</button>
+  <button class="chip" data-ink="蝉翼">蝉翼</button>
+  <button class="chip" id="rubPeel">揭</button>
+  <button class="chip" id="rubSave" hidden>存</button>
+  <button class="chip" id="rubExit">退</button>
+</div>
+<div class="sheet" id="sheet" hidden></div>
+
+<div class="cam" id="cam" hidden>
+  <video id="video" autoplay playsinline muted></video>
+  <div class="row">
+    <button class="shutter" id="snap">拍</button>
+    <button class="chip" id="camClose">返回</button>
+  </div>
+</div>
+<div class="namepad" id="namePad" hidden>
+  <iframe id="namePadFrame" title="题名"></iframe>
+  <button class="chip" id="namePadClose">退</button>
+</div>
+<div class="busy" id="busy" hidden><span>开凿</span></div>
+<div class="fps" id="fps" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

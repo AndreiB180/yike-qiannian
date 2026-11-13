@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>题名</title>
+<style>
+/* 平板题名页（C9）：竖着拿，整屏是碑上的一行题名位；右边是已经刻好的“太和七年”。用笔写，笔压定深浅 */
+:root { --stage:#12100D; --stone:#BDAE94; --stone2:#A99A80; --ink:#2A2118; --sand:#C8B48F; --fire:#E8A65A; --line:#3A332A;
+  --font:"Noto Serif SC","Source Han Serif SC","Songti SC","STSong",serif; }
+* { box-sizing:border-box; }
+html, body { margin:0; height:100%; overflow:hidden; background:var(--stage); font-family:var(--font); -webkit-user-select:none; user-select:none; touch-action:none; }
+.slab { position:fixed; top:4vh; bottom:4vh; left:50%; transform:translateX(-50%); aspect-ratio: 1 / 2.42;   /* 和 inscription.js 的碑一样比例：宽 0.24H、高 0.58H */
+  background: radial-gradient(120% 90% at 40% 30%, var(--stone), var(--stone2)); border-radius:6px; box-shadow: inset 0 0 0 10px rgba(0,0,0,0.12), inset 0 0 40px rgba(0,0,0,0.25); }
+.era { position:absolute; right:6%; top:6%; height:56%; width:32%; display:flex; flex-direction:column; justify-content:space-around; align-items:center;
+  font-size: min(9vh, 7vw); font-weight:600; color:rgba(42,33,24,0.55); text-shadow: 0 1px 0 rgba(255,255,255,0.25); }
+.zone { position:absolute; left:8%; width:48%; top:6%; bottom:6%; border:1px dashed rgba(42,33,24,0.25); border-radius:3px; }
+canvas { position:absolute; inset:0; width:100%; height:100%; }
+.bar { position:fixed; right:3vw; bottom:4vh; display:flex; flex-direction:column; gap:2vh; }
+.bar button { width:min(16vw, 92px); height:min(16vw, 92px); border-radius:50%; border:1px solid var(--line); background:rgba(28,25,21,0.9);
+  color:var(--sand); font:min(7vw, 38px) var(--font); }
+.bar button.go { border-color:var(--fire); color:var(--fire); }
+.bar button:active { transform:scale(0.96); }
+.flash { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; font-size:8vh; letter-spacing:0.6em; color:var(--fire);
+  pointer-events:none; opacity:0; transition:opacity .4s; }
+.flash.on { opacity:1; }
+</style>
+</head>
+<body>
+<div class="slab" id="slab">
+  <div class="era"><span>太</span><span>和</span><span>七</span><span>年</span></div>
+  <div class="zone" id="zone"><canvas id="cv"></canvas></div>
+</div>
+<div class="bar">
+  <button id="clear" title="清">清</button>
+  <button id="carve" class="go" title="刻">刻</button>
+</div>
+<div class="flash" id="flash">已刻</div>
+<script>
+// 笔迹：每笔是 [[u, v, 笔压, 毫秒], ...]，u、v 是题名位里的相对坐标（0..1）。
+// 笔（Apple Pencil）用 pressure；手指没有笔压，用书写速度代替（快 → 细）
+const cv = document.getElementById("cv"), zone = document.getElementById("zone"), g = cv.getContext("2d");
+let strokes = [], cur = null, dpr = 1;
+function fit() {
+  const r = zone.getBoundingClientRect(); dpr = window.devicePixelRatio || 1;
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); draw();
+}
+function pressure(e, prev) {
+  if (e.pointerType === "pen" && e.pressure > 0) return e.pressure;
+  if (!prev) return 0.55;
+  const r = zone.getBoundingClientRect(), dt = Math.max(e.timeStamp - prev[3], 1);
+  const v = Math.hypot((e.clientX - r.left) / r.width - prev[0], (e.clientY - r.top) / r.height - prev[1]) / dt * 1000;   // 每秒走过题名位的几分之几
+  return Math.min(0.9, Math.max(0.2, 0.85 - 0.35 * v));
+}
+function pt(e, prev) {
+  const r = zone.getBoundingClientRect();
+  return [(e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height, pressure(e, prev), e.timeStamp];
+}
+function draw() {
+  g.clearRect(0, 0, cv.width, cv.height);
+  g.lineCap = "butt"; g.lineJoin = "round"; g.strokeStyle = "rgba(42,33,24,0.92)";
+  for (const s of strokes.concat(cur ? [cur] : [])) {
+    for (let i = 1; i < s.length; i++) {
+      const a = s[i - 1], b = s[i];
+      g.lineWidth = (2 + 16 * Math.pow((a[2] + b[2]) / 2, 0.7)) * dpr;
+      g.beginPath(); g.moveTo(a[0] * cv.width, a[1] * cv.height); g.lineTo(b[0] * cv.width, b[1] * cv.height); g.stroke();
+    }
+  }
+}
+zone.addEventListener("pointerdown", (e) => { try { zone.setPointerCapture(e.pointerId); } catch (err) { /* 合成事件没有真指针 */ } cur = [pt(e)]; draw(); });
+zone.addEventListener("pointermove", (e) => {
+  if (!cur) return;
+  let evs = e.getCoalescedEvents ? e.getCoalescedEvents() : []; if (!evs.length) evs = [e];   // 有的浏览器给空列表
+  for (const c of evs) cur.push(pt(c, cur[cur.length - 1]));
+  draw();
+});
+const end = () => { if (cur && cur.length > 1) strokes.push(cur); cur = null; draw(); };
+zone.addEventListener("pointerup", end); zone.addEventListener("pointercancel", end);
+document.getElementById("clear").addEventListener("click", () => { strokes = []; draw(); });
+// ?embed=1：嵌在舞台页里（网上、没有平板）：笔迹交给舞台页自己刻，不走服务
+const EMBED = new URLSearchParams(location.search).has("embed") && window.parent !== window;
+document.getElementById("carve").addEventListener("click", async () => {
+  if (!strokes.length) return;
+  const S = strokes.map((s) => s.map(([u, v, p]) => [+u.toFixed(4), +v.toFixed(4), +p.toFixed(3)]));
+  if (EMBED) { window.parent.postMessage({ ykqn: 1, type: "write", strokes: S }, location.origin); strokes = []; draw(); return; }
+  const body = JSON.stringify({ strokes: S });
+  try {
+    const r = await fetch("api/name", { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    if (!r.ok) throw new Error(r.status);
+    const f = document.getElementById("flash"); f.classList.add("on"); setTimeout(() => f.classList.remove("on"), 900);
+  } catch (err) { console.error(err); }
+});
+addEventListener("resize", fit); fit();
+</script>
+</body>
+</html>
