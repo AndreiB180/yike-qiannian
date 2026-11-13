@@ -141,7 +141,7 @@ body.busy, body.busy * { cursor: progress !important; }
 body.static .panel .new { display: none; }   /* 静态网站没有后端建浮雕：拍 / 传藏起来 */
 
 /* 窗口矮（小笔记本、嵌在用户测试页里）：面板缩一点，作品一行四个；还放不下就让面板自己滚，底下的按钮不会被切掉 */
-.panel { max-height: calc(100vh - 24px); overflow-y: auto; scrollbar-width: thin; }
+.panel { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); overflow-y: auto; scrollbar-width: thin; }
 @media (max-height: 820px) and (min-width: 761px) {
   .panel section { margin-bottom: 12px; }
   .works { gap: 6px; }

@@ -42,7 +42,7 @@ body.s3 main > h1, body.s3 #sidLine { display:none; }
 .s3grid .task .t { flex-basis:100%; font-size:18px; }
 .s3grid .task .clock { min-width:0; text-align:left; margin-right:auto; }
 .s3grid .task button { padding:5px 14px; }
-.stagebox { height:max(540px, calc(100vh - 170px)); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+.stagebox { height:max(540px, calc(100vh - 260px)); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
 .stagebox iframe { width:100%; height:100%; border:0; display:block; }
 .code { width:100%; min-height:120px; font:14px/1.5 ui-monospace, Menlo, Consolas, monospace; word-break:break-all; }
 .task .t { font-size:20px; }
@@ -87,7 +87,7 @@ label { cursor:pointer; }
     <h2>三　上手试一试</h2>
     <p class="note">右边是作品本身。四件事一件一件来：先点这件事的“开始”，再在右边的画面里自己想办法做到。做到了页面会自己记下，影子那件做到了自己点“做到了”；三分钟没做出来就算了，也可以点“放弃”。</p>
     <div class="s3grid">
-      <div id="tasks"></div>
+      <div><p class="note" id="stageWait">作品载入中，载完才能点“开始”…</p><div id="tasks"></div></div>
       <div class="stagebox"><iframe id="stageFrame" title="一刻千年"></iframe></div>
     </div>
   </section>
@@ -119,19 +119,33 @@ $("#sidLine").textContent = `编号 ${sid}`;
 const R = { sid, started: new Date().toISOString(), ua: navigator.userAgent.slice(0, 120), match: {}, ab: [], tasks: {}, ratings: {}, comment: "", t: {} };
 let step = 0, items = null, stepT0 = performance.now();
 const LIMIT = 180, running = {};   // 正在计时的任务 → 它的 stop
-let lastLight = null, yearHold = 0;
-// 舞台（同源 iframe）报来的事：做到了就自动停表
+let lastLight = null, yearHold = 0, stageReady = false, lastYear = 483, inRangeAt = null;
+const in1907 = (y) => Math.abs(y - 1907) <= 2;
+// 1907：停在前后两年里半秒以上才算（拖过去路过不算），用时记到进入那一刻
+function armYear() {
+  clearTimeout(yearHold);
+  if (inRangeAt === null || !running.y1907) return;
+  yearHold = setTimeout(() => { if (inRangeAt !== null) running.y1907?.(true, "auto", inRangeAt); }, Math.max(0, inRangeAt + 600 - performance.now()));
+}
+// 舞台（本页嵌的 iframe）报来的事：作品载完才让点“开始”；做到了就自动停表
 window.addEventListener("message", (e) => {
-  if (e.origin !== location.origin || !e.data || e.data.ykqn !== 1) return;
+  if (e.origin !== location.origin || e.source !== $("#stageFrame").contentWindow || !e.data || e.data.ykqn !== 1) return;
   const d = e.data;
-  if (d.type === "light") lastLight = { mode: d.mode, dir: d.dir, xy: d.xy, z: d.z };
+  if (d.type === "ready") { stageReady = true; $("#stageWait").hidden = true; refreshStarts(); }
+  else if (d.type === "light") lastLight = { mode: d.mode, dir: d.dir, xy: d.xy, z: d.z };
   else if (d.type === "name") running.name?.(true, "auto");
   else if (d.type === "peel") running.rub?.(true, "auto");
-  else if (d.type === "year") {   // 停在 1907 前后两年里半秒以上才算（拖过去路过不算）
-    clearTimeout(yearHold);
-    if (Math.abs(d.y - 1907) <= 2) yearHold = setTimeout(() => running.y1907?.(true, "auto"), 600);
+  else if (d.type === "year") {
+    lastYear = d.y;
+    if (!in1907(d.y)) { inRangeAt = null; clearTimeout(yearHold); }
+    else if (inRangeAt === null) { inRangeAt = performance.now(); armYear(); }
   }
 });
+// “开始”：作品载完、没有别的任务在计时、这件还没做过，才能点（一次只计一件）
+function refreshStarts() {
+  const busy = Object.keys(running).length > 0;
+  $$(".task").forEach((row) => { row.querySelector('[data-a="start"]').disabled = !stageReady || busy || row.dataset.k in R.tasks || row.classList.contains("cur"); });
+}
 
 async function init() {
   items = await (await fetch("assets/usertest/items.json")).json();
@@ -153,21 +167,24 @@ async function init() {
   $$(".task").forEach((row) => {
     const k = row.dataset.k, clock = row.querySelector(".clock"); let t0 = 0, timer = 0;
     const [bS, bD, bG] = row.querySelectorAll("button");
-    const stop = (ok, how) => {
+    const stop = (ok, how, at) => {   // at：做到的那一刻（1907 按进入范围的时刻算）
       if (running[k] !== stop) return;
       delete running[k]; clearInterval(timer); row.classList.remove("cur");
-      const s = Math.min(LIMIT, (performance.now() - t0) / 1000);
+      const s = Math.min(LIMIT, ((at ? Math.max(at, t0) : performance.now()) - t0) / 1000);
       R.tasks[k] = { sec: +s.toFixed(1), ok, how };   // how：auto 舞台报的 / self 自己点的 / give 放弃 / limit 到三分钟
       if (k === "shadow") R.tasks[k].light = lastLight;   // 自己点的：留下当时光的位置，事后能核
-      clock.textContent = `${s.toFixed(1)} 秒${ok ? "" : how === "limit" ? "（三分钟到了）" : "（放弃）"}`; bD.disabled = bG.disabled = true; update();
+      clock.textContent = `${s.toFixed(1)} 秒${ok ? "" : how === "limit" ? "（三分钟到了）" : "（放弃）"}`; bD.disabled = bG.disabled = true; refreshStarts(); update();
     };
     bS.addEventListener("click", () => {
-      t0 = performance.now(); bS.disabled = true; bD.disabled = bG.disabled = false; row.classList.add("cur"); running[k] = stop;
+      if (!stageReady || Object.keys(running).length) return;
+      t0 = performance.now(); bD.disabled = bG.disabled = false; row.classList.add("cur"); running[k] = stop; refreshStarts();
       timer = setInterval(() => { const s = (performance.now() - t0) / 1000; clock.textContent = `${s.toFixed(1)} 秒`; if (s >= LIMIT) stop(false, "limit"); }, 100);
+      if (k === "y1907" && in1907(lastYear)) { inRangeAt = t0; armYear(); }   // 已经停在 1907：再待半秒就算
       $("#stageFrame").focus();
     });
     bD.addEventListener("click", () => stop(true, "self")); bG.addEventListener("click", () => stop(false, "give"));
   });
+  refreshStarts();
   // 打分
   const RT = [["fun", "有不有趣"], ["beauty", "好不好看"], ["keep", "想不想带走一张拓片或观照记录"]];
   $("#ratings").innerHTML = RT.map(([k, t]) => `<div class="qa"><p class="q">${t}（1 一点也不，5 非常）</p><div class="scale" data-k="${k}">${[1, 2, 3, 4, 5].map((v) => `<button data-v="${v}">${v}</button>`).join("")}</div></div>`).join("");
@@ -210,7 +227,11 @@ $("#next").addEventListener("click", async () => {
   $$(".step").forEach((s) => (s.hidden = +s.dataset.step !== step));
   document.body.classList.toggle("s3", step === 3);
   if (step === 2) { abI = 0; showAB(); }
-  if (step === 3 && !$("#stageFrame").src) $("#stageFrame").src = "./?work=t01&mute=1";   // 一律用 t01（公有领域，正脸）
+  if (step === 3 && !$("#stageFrame").src) {
+    // 有后端（演示机）时先把碑上上一位写的名字清掉；网上（静态）这一下会被拒，不碍事
+    try { await fetch("api/name", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ clear: true }) }); } catch (e) { /* 没有后端 */ }
+    $("#stageFrame").src = "./?work=t01&mute=1";   // 一律用 t01（公有领域，正脸）
+  }
   if (step === 4) $("#stageFrame").src = "about:blank";   // 做完了就把舞台关掉，省显卡
   if (step === 5) { $("#next").hidden = true; await submit(); }
   update(); window.scrollTo(0, 0);

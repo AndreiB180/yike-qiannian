@@ -22,9 +22,12 @@ const LIGHTS = {
 // 嵌在用户测试页里时：把受试者做到的事（刻名、拖到某年、揭拓片、光的位置）告诉外面那页，任务自动计时
 const EMBED = window.parent !== window;
 function emit(type, data = {}) { if (EMBED) try { window.parent.postMessage({ ykqn: 1, type, ...data }, location.origin); } catch (e) { /* 外面不是同源页 */ } }
-let lightT = 0;
-function emitLight() {
-  const t = performance.now(); if (!EMBED || t - lightT < 150) return; lightT = t;
+let lightT = 0, lightTail = 0;
+function emitLight() {   // 最多 150 毫秒报一次；停手后再补报一次最后的位置（受试者点“做到了”时记的是最终光位）
+  if (!EMBED) return;
+  const t = performance.now(); clearTimeout(lightTail);
+  if (t - lightT < 150) { lightTail = setTimeout(emitLight, 160); return; }
+  lightT = t;
   emit("light", { mode: state.mode, dir: state.dir.map((v) => +v.toFixed(3)), xy: state.ptxy && R.w ? [+(state.ptxy[0] / R.w).toFixed(3), +(state.ptxy[1] / R.h).toFixed(3)] : null, z: +state.zMul.toFixed(2) });
 }
 const state = { mode: "lamp", rect: [0, 0, 1, 1], dpr: 1, ptr: null, dir: [-0.55, -0.65, 0.52], ptxy: null, zMul: 1, dirty: true, work: null, lastFlick: 0,
@@ -340,7 +343,7 @@ async function pollName() {
     const j = await r.json();
     if (j.version !== nameVer) { const first = nameVer === -1; nameVer = j.version; state.nameStrokes = j.strokes; carveName(!first); if (!first) emit("name"); }
     setTimeout(pollName, 700);
-  } catch (e) { /* 没有后端 */ }
+  } catch (e) { if (state.server) setTimeout(pollName, 2000); }   // 有后端时断一下网就过会儿再试；没有后端就不轮询了
 }
 
 // 浮雕放在标题、光源钮、面板、时间轴之外的空处（按它们实际占的位置算，不写死边距）
@@ -528,10 +531,10 @@ function onPointer(e) {
 }
 cv.addEventListener("pointerdown", (e) => { cv.setPointerCapture(e.pointerId); state.ptr = e.pointerId; onPointer(e); });
 cv.addEventListener("pointermove", (e) => { if (state.ptr === e.pointerId) onPointer(e); });
-for (const ev of ["pointerup", "pointercancel"]) cv.addEventListener(ev, () => { state.ptr = null; });
+for (const ev of ["pointerup", "pointercancel"]) cv.addEventListener(ev, () => { state.ptr = null; emitLight(); });
 function nudgeZ(f) {
   if (!LIGHTS[state.mode].point) return;
-  state.zMul = Math.min(3, Math.max(0.25, state.zMul * f)); state.dirty = true;
+  state.zMul = Math.min(3, Math.max(0.25, state.zMul * f)); state.dirty = true; emitLight();
 }
 cv.addEventListener("wheel", (e) => { nudgeZ(Math.exp(e.deltaY * 0.001)); e.preventDefault(); }, { passive: false });
 
@@ -805,18 +808,20 @@ function openPad() {
   $("#namePad").hidden = false; f.focus();
 }
 function closePad() { $("#namePad").hidden = true; }
+$("#nameBtn").disabled = true;   // 作品载完（init 末尾）才能写
 $("#nameBtn").addEventListener("click", openPad);
 $("#namePadClose").addEventListener("click", closePad);
 $("#namePad").addEventListener("pointerdown", (e) => { if (e.target === e.currentTarget) closePad(); });
 window.addEventListener("message", async (e) => {
-  if (e.origin !== location.origin || !e.data || e.data.ykqn !== 1 || e.data.type !== "write" || !Array.isArray(e.data.strokes)) return;
+  if (e.origin !== location.origin || e.source !== $("#namePadFrame").contentWindow) return;   // 只认自己的题名板（同一个 github.io 域名下还有别的项目）
+  if (!e.data || e.data.ykqn !== 1 || e.data.type !== "write" || !Array.isArray(e.data.strokes) || !R.w) return;
   closePad();
   const strokes = e.data.strokes;
-  if (state.server) {
+  if (state.server) {   // 有后端：交给服务（平板那条路一样），记下版本号，本页直接刻，轮询就不会再刻一遍
     try {
       const r = await fetch("api/name", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ strokes }) });
-      if (r.ok) { emit("name"); return; }
-    } catch (err) { /* 服务断了：就在本页刻 */ }
+      if (r.ok) nameVer = (await r.json()).version;
+    } catch (err) { /* 服务断了：照样在本页刻 */ }
   }
   state.nameStrokes = strokes; state.nameText = ""; carveName(true); emit("name");
 });
@@ -883,7 +888,9 @@ async function init() {
   if (q.get("bench")) bench();   // 测完把结果贴在画面上，页面照常能用
   requestAnimationFrame(frame);
   requestAnimationFrame(() => requestAnimationFrame(() => { window.__ready = true; }));   // 截图脚本等这个
+  $("#nameBtn").disabled = false;
   pollName();
+  emit("ready");   // 用户测试页等这个才让点“开始”（作品还在下载时不计时）
 }
 
 function gpuName() {
