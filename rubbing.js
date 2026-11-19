@@ -190,7 +190,8 @@ export function autoDabs(T, R, passes = 2, seed = 5, order = "rows") {
 
 // 揭下来的拓片：宣纸留边，左边一行跋“丙午年 ×× 手拓”（名字用观众在平板上写的笔迹），下面一方朱文印“云冈手拓”。返回 canvas
 // strokes：题名笔迹（[[u, v, 压], ...]，u、v 是题名区里的坐标）；没有就只写“丙午年手拓”
-export function makeSheet(T, style = "乌金", { strokes = null, nameText = "", long = 1800 } = {}) {
+// px：纸边纤维、印上斑点按几倍像素画（打印用的大图，看着和舞台上那张一样密、一样粗）；默认 1 和舞台一样
+export function makeSheet(T, style = "乌金", { strokes = null, nameText = "", long = 1800, px = 1 } = {}) {
   const rgba = new Uint8ClampedArray(T.w * T.h * 4); paint(T, rgba, style, null, false);
   const src = document.createElement("canvas"); src.width = T.w; src.height = T.h;
   src.getContext("2d").putImageData(new ImageData(rgba, T.w, T.h), 0, 0);
@@ -201,9 +202,9 @@ export function makeSheet(T, style = "乌金", { strokes = null, nameText = "", 
   // 宣纸底：米白，细纤维
   g.fillStyle = "rgb(242,236,222)"; g.fillRect(0, 0, cv.width, cv.height);
   let sd = 7; const rnd = () => ((sd = (Math.imul(sd, 1664525) + 1013904223) >>> 0) / 4294967296);
-  g.lineWidth = 1;
-  for (let i = 0; i < 2600; i++) {
-    const x = rnd() * cv.width, y = rnd() * cv.height, a = rnd() * Math.PI, L = 4 + rnd() * 20;
+  g.lineWidth = px;
+  for (let i = 0; i < 2600; i++) {   // 条数不变，长短粗细跟着 px 放大：整张纸就是舞台那张等比放大
+    const x = rnd() * cv.width, y = rnd() * cv.height, a = rnd() * Math.PI, L = (4 + rnd() * 20) * px;
     g.strokeStyle = `rgba(150,135,110,${0.05 + 0.08 * rnd()})`; g.beginPath(); g.moveTo(x, y); g.lineTo(x + L * Math.cos(a), y + L * Math.sin(a)); g.stroke();
   }
   g.drawImage(src, mL, mT, rw, rh);
@@ -238,7 +239,7 @@ export function makeSheet(T, style = "乌金", { strokes = null, nameText = "", 
   q.globalCompositeOperation = "destination-out";
   q.font = `${Math.round(S * 0.42)}px "Weibei SC","Kaiti SC","STKaiti","KaiTi",serif`; q.textAlign = "center"; q.textBaseline = "middle";
   [["一", 0.74, 0.27], ["刻", 0.74, 0.73], ["千", 0.26, 0.27], ["年", 0.26, 0.73]].forEach(([c, u, v]) => q.fillText(c, S * u, S * v));
-  for (let i = 0; i < 220; i++) { q.globalAlpha = 0.2 + 0.5 * rnd(); q.beginPath(); q.arc(rnd() * S, rnd() * S, 0.4 + 1.6 * rnd(), 0, 6.283); q.fill(); }
+  for (let i = 0; i < 220; i++) { q.globalAlpha = 0.2 + 0.5 * rnd(); q.beginPath(); q.arc(rnd() * S, rnd() * S, (0.4 + 1.6 * rnd()) * px, 0, 6.283); q.fill(); }
   g.save(); g.globalAlpha = 0.92; g.translate(sx + S / 2, sy + S / 2); g.rotate(-0.02); g.drawImage(seal, -S / 2, -S / 2); g.restore();
   return cv;
 }

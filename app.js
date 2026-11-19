@@ -574,17 +574,44 @@ $("#savePng").addEventListener("click", () => {
   a.download = `一刻千年_${state.work || "浮雕"}.png`; a.href = c.toDataURL("image/png"); a.click();
 });
 
+// 在输入框里打字时不当快捷键（滑条、按钮不算）
+const typing = (el) => !!el && (el.isContentEditable || /^(TEXTAREA|SELECT)$/.test(el.tagName) || (el.tagName === "INPUT" && !/^(range|checkbox|radio|button|submit|reset|file|color)$/i.test(el.type)));
 window.addEventListener("keydown", (e) => {
-  if (e.key === "1") setMode("sun"); else if (e.key === "2") setMode("torch"); else if (e.key === "3") setMode("lamp");
-  else if (e.key === "m") setStone(R.stone === "云冈砂岩" ? "汉白玉" : "云冈砂岩");
-  else if (e.key === "ArrowUp") nudgeZ(1.12); else if (e.key === "ArrowDown") nudgeZ(1 / 1.12);
-  else if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+  if (typing(e.target)) return;
+  const pg = { PageDown: "ArrowRight", PageUp: "ArrowLeft" }[e.key];   // 翻页笔：下一页 / 上一页 = → / ←
+  if (pg) e.preventDefault();   // 滑条有焦点时 PageDown 会把浮雕高度跳一大格
+  const key = pg || e.key;
+  if (key === "1") setMode("sun"); else if (key === "2") setMode("torch"); else if (key === "3") setMode("lamp");
+  else if (key === "m") setStone(R.stone === "云冈砂岩" ? "汉白玉" : "云冈砂岩");
+  else if (key === "ArrowUp") nudgeZ(1.12); else if (key === "ArrowDown") nudgeZ(1 / 1.12);
+  else if (key === "ArrowRight" || key === "ArrowLeft") {
     // 到下一个 / 上一个关键年份
-    const p = posAt(state.year), right = e.key === "ArrowRight";
+    const p = posAt(state.year), right = key === "ArrowRight";
     const i = right ? POS.findIndex((q) => q > p + 1e-6) : POS.map((q, j) => (q < p - 1e-6 ? j : -1)).filter((j) => j >= 0).pop();
     if (i !== undefined && i >= 0) glideTo(KEYS[i]);
-  } else if (e.key === "w") setEnv(!state.env);
+  } else if (key === "w") setEnv(!state.env);
+  else if (!e.repeat && !e.metaKey && !e.ctrlKey && !e.altKey) demoKey(String(key).toLowerCase());
 });
+// 现场演示、录视频的键：c 干净画面（0 → 2 → 1 → 0）、h 执灯、k 换刻法、t 拓（进 / 退）、f 全屏
+let lampKey = false;
+function demoKey(k) {
+  if (k === "c") setClean(state.clean === 0 ? 2 : state.clean === 2 ? 1 : 0);
+  else if (k === "h") { if (!lampKey) { lampKey = true; setHoldLamp(!holdLamp).finally(() => { lampKey = false; }); } }   // 摄像头还在开时再按不算
+  else if (k === "k") { const nx = KEFA[(KEFA.indexOf(state.kefa) + 1) % KEFA.length]; busy($(`#kefa [data-kefa="${nx}"]`), () => setKefa(nx)); }
+  else if (k === "t") { if (rub.on) exitRub(); else busy($("#rubBtn"), enterRub); }
+  else if (k === "f") {
+    // 窗口本来就是全屏（开演用 --start-fullscreen 打开）时网页退不出、再叠一层只会弹“按 Esc 退出”，就不叠；那时退出用 ⌃⌘F
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    else if (!matchMedia("(display-mode: fullscreen)").matches) document.documentElement.requestFullscreen().catch(() => {});
+  }
+}
+// 干净画面：1 只留浮雕，2 再留时间轴；0 回到平时（标题、光源钮、面板都回来）。浮雕重新排版，四边淡出跟着开关
+function setClean(c) {
+  state.clean = c;
+  if (c) document.body.dataset.clean = c; else delete document.body.dataset.clean;
+  R.edge = c ? 0.12 : 0;
+  fit();
+}
 window.addEventListener("resize", fit);
 
 // ---------- 拓（F4）----------
@@ -620,6 +647,7 @@ async function enterRub() {
 function exitRub() {
   rub.on = false; rubCv.hidden = true; $("#rubBar").hidden = true; $("#sheet").hidden = true; $("#sheet").replaceChildren();
   delete document.body.dataset.rub; state.dirty = true;
+  fit();   // 拓的时候时间轴藏着，这期间按 c、f 或改窗口大小会把它那块排给浮雕；退出来按时间轴在的样子重排
 }
 function rubDab(u, v, amt) {
   if (!rub.on || rub.sheet) return;
@@ -686,8 +714,8 @@ function saveSTL(opts = {}) {   // opts：makeSTL 的参数（打印件用 { max
   download(`一刻千年_${state.work || "浮雕"}_${state.year}.stl`, new Blob([r.buf], { type: "model/stl" }));
   return { tris: r.tris, watertight: r.watertight, size: r.size };
 }
-// 观照记录：临时换光、年份、石材，各画一帧截下来，排成 A4；画完恢复原样
-function makeRecordPage() {
+// 观照记录：临时换光、年份、石材，各画一帧截下来，排成 A4；画完恢复原样。scale：页面放大倍数（1 = 150 dpi，2 = 300 dpi 打印）
+function makeRecordPage(scale = 1) {
   if (!R.w) return null;
   const keep = { mode: state.mode, dir: state.dir, year: state.year, env: state.env, stone: R.stone, expo: R.expo, lock: state.expoLock, view: state.view };
   state.view = state.viewT = 0; applyView();
@@ -715,7 +743,7 @@ function makeRecordPage() {
   // 恢复
   R.setStone(keep.stone); setEnv(keep.env); setYear(keep.year, false); state.mode = keep.mode; state.dir = keep.dir; R.expo = keep.expo; state.expoLock = keep.lock;
   state.view = state.viewT = keep.view || 0; applyView(); state.dirty = true;
-  return makeRecord({ day, years, stones, rubbing: rub.sheet || null, title: "观照记录", sub: "丙午冬  大同云冈" });
+  return makeRecord({ day, years, stones, rubbing: rub.sheet || null, title: "观照记录", sub: "丙午冬  大同云冈", scale });
 }
 $("#stlBtn").addEventListener("click", (e) => busy(e.currentTarget, saveSTL));
 // 执灯（F1）：摄像头看真手电，灯头的位置就是灯的位置（灯模式，射灯）
@@ -732,7 +760,10 @@ async function setHoldLamp(on) {
       state.lampOn = 1; state.ptxy = [u * R.w, v * R.h]; state.zMul = z; state.dirty = true;
     });
     $("#lampPrev").hidden = false; $("#lampBtn").classList.add("on");
-  } catch (e) { console.error("执灯：摄像头打不开", e); }
+  } catch (e) {   // 打不开就把灯还原，不留一片黑；流要是已经拿到（播放那步才出错）也关掉，摄像头灯不常亮
+    console.error("执灯：摄像头打不开", e); state.lampOn = null; state.dirty = true;
+    const v = $("#lampVideo"); v.srcObject?.getTracks?.().forEach((t) => t.stop()); v.srcObject = null;
+  }
 }
 $("#lampBtn").addEventListener("click", () => setHoldLamp(!holdLamp));
 // 刻法（C3）：剔地起突 / 压地隐起 / 减地平钑
@@ -945,7 +976,8 @@ window.__R = R; window.__state = state; window.__api = {
   setView: (v) => { state.view = state.viewT = v; applyView(); state.dirty = true; },
   // 拓：进入、拍墨（u, v 0..1）、换墨、揭、退；自动拍满（录视频、示范）
   rubEnter: () => enterRub(), rubDab: (u, v, a) => rubDab(u, v, a ?? 0.4), rubInk: (st) => setInk(st), rubPeel: () => peel(), rubExit: () => exitRub(),
-  setKefa: (k) => setKefa(k), holdLamp: (on) => setHoldLamp(on), saveSTL: (o) => saveSTL(o || {}), recordPage: () => { const c = makeRecordPage(); return c && c.toDataURL("image/jpeg", 0.9); },
+  setKefa: (k) => setKefa(k), holdLamp: (on) => setHoldLamp(on), saveSTL: (o) => saveSTL(o || {}),
+  recordPage: (scale = 1, type = "image/jpeg") => { const c = makeRecordPage(scale); return c && c.toDataURL(type, 0.9); },   // 打印：recordPage(2, "image/png")
   rubAutoList: (passes = 2, order = "rows") => (rub.on ? autoDabs(rub.T, rub.R, passes, 5, order).map(([x, y, q]) => [x / rub.T.w, y / rub.T.h, q]) : []),
   insPlan: () => state.insAnim && { total: state.insAnim.P.total, strikes: strikes(state.insAnim.P, 1e9) },
   sunAt: (day, hour) => { const s = sunAt(day, hour); state.dir = s.dir; state.dirty = true; return s.alt; },

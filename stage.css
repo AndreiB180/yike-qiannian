@@ -130,6 +130,7 @@ body.busy, body.busy * { cursor: progress !important; }
 /* 执灯：角上一个小预览，看得到摄像头认到的灯头 */
 #lampPrev { position: fixed; left: 28px; bottom: 112px; width: 160px; height: 120px; border-radius: 8px; border: 1px solid var(--line); z-index: 6; }
 #lampPrev[hidden] { display: none; }
+body[data-clean] #lampPrev { display: none; }   /* 录视频：执灯照样能用（h），预览不入镜 */
 #kefa { flex-wrap: wrap; gap: 6px; }
 #kefa .chip { padding-left: 8px; padding-right: 8px; letter-spacing: 0; white-space: nowrap; }
 

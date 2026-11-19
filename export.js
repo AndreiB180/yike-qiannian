@@ -67,9 +67,11 @@ export function makeSTL(heights, w, h, { maxSide = 320, longMM = 128, reliefMM =
 }
 
 // 观照记录：shots = { day: [{ img, label }...6], years: [...4], stones: [...2], rubbing: canvas | null }，title、name。返回 A4 横版 canvas（150 dpi）
-export function makeRecord({ day, years, stones, rubbing, title = "观照记录", sub = "" }) {
-  const W = 1754, H = 1240, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+// scale：整页放大（2 = 300 dpi，3508 × 2480，打印用）；排版坐标照旧按 150 dpi 写
+export function makeRecord({ day, years, stones, rubbing, title = "观照记录", sub = "", scale = 1 }) {
+  const W = 1754, H = 1240, cv = document.createElement("canvas"); cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
   const g = cv.getContext("2d");
+  if (scale !== 1) g.scale(scale, scale);
   g.fillStyle = "#F3EEE4"; g.fillRect(0, 0, W, H);
   const ink = "#2A2118", soft = "#7A6A55", serif = '"Songti SC","STSong","Noto Serif SC",serif', kai = '"Kaiti SC","STKaiti","KaiTi",serif';
   g.fillStyle = ink; g.font = `600 44px ${serif}`; g.textBaseline = "top"; g.fillText(title, 70, 56);
